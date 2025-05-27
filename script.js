@@ -1,10 +1,10 @@
 document.addEventListener("DOMContentLoaded", function() {
     // Logg en velkommen melding når dokumentet er lastet
-    console.log("Velkommen til Helgomega!");
+    console.log("Velkommen til Nordic Geeks!");
 });
 
-// Hent biler fra API-et og vis dem
-fetch("http://localhost:3000/kjop/biler")
+// Hent t-skjorter fra API-et og vis dem
+fetch("http://localhost:3000/kjop/tskjorter")
 .then(response => {
     // Hvis svaret ikke er OK, kast en feil
     if (!response.ok) {
@@ -14,41 +14,41 @@ fetch("http://localhost:3000/kjop/biler")
     return response.json();
 })
 .then(data => {
-    // Vis bilene ved å bruke visBiler-funksjonen
-    visBiler(data);
+    // Vis t-skjortene ved å bruke visTskjorter-funksjonen
+    visTskjorter(data);
 })
 .catch(error => {
-    // Logg feilen hvis det oppstår en feil ved henting av biler
-    console.error("Feil under henting av biler:", error);
+    // Logg feilen hvis det oppstår en feil ved henting av t-skjorter
+    console.error("Feil under henting av t-skjorter:", error);
 });
 
-// Funksjon for å vise biler på siden
-function visBiler(biler) {
-    const container = document.getElementById("bil-container");
+// Funksjon for å vise t-skjorter på siden
+function visTskjorter(tskjorter) {
+    const container = document.getElementById("tskjorte-container");
 
     // Sjekk om containeren finnes i HTML
     if (!container) {
-        console.warn("Fant ikke bil-container i HTML");
+        console.warn("Fant ikke tskjorte-container i HTML");
         return;
     }
 
-    // Gå gjennom hver bil og legg dem til i containeren
-    biler.forEach(bil => {
+    // Gå gjennom hver t-skjorte og legg dem til i containeren
+    tskjorter.forEach(tskjorte => {
         const div = document.createElement("div");
-        div.classList.add("bil");
+        div.classList.add("tskjorte");
         console.log("Hei");
 
-        // Generer HTML for hver bil
+        // Generer HTML for hver t-skjorte
         div.innerHTML = `
-            <h3>${bil.modell}</h3>
-            <img src=${bil.bilde} alt="${bil.modell}" class="bil-bilde" />
-            <p>Pris: ${bil.pris} kr</p>
-            <p>Merke: ${bil.merke}</p>
-            <p>Årsmodell: ${bil.år}</p>
-            <p>Giring: ${bil.gir}</p>
+            <h3>${tskjorte.navn}</h3>
+            <img src=${tskjorte.bilde} alt="${tskjorte.navn}" class="tskjorte-bilde" />
+            <p>Pris: ${tskjorte.pris} kr</p>
+            <p>Farge: ${tskjorte.farge}</p>
+            <p>Størrelse: ${tskjorte.størrelse}</p>
+            <p>Design: ${tskjorte.design}</p>
         `;
 
-        // Legg til bilen i containeren
+        // Legg til t-skjorten i containeren
         container.appendChild(div);
     });
 }
@@ -137,63 +137,60 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 });
 
-// Hente dine kjøpte biler
-function hentKjopteBiler() {
+// Hente dine kjøpte t-skjorter
+function hentKjopteTskjorter() {
     const lagretBruker = localStorage.getItem("innloggetBruker");
     if (!lagretBruker) {
         console.warn("Ingen bruker er logget inn.");
         return;
     }
 
-    const brukernavn = lagretBruker.replace(/"/g, ""); // Fjerner eventuelle anførselstegn fra brukernavnet (copilots forslag til kommentar)
+    const brukernavn = lagretBruker.replace(/"/g, ""); // Fjerner eventuelle anførselstegn fra brukernavnet
 
-    // Hent kjøpte biler for den innlogga brukeren
+    // Hent kjøpte t-skjorter for den innlogga brukeren
     fetch(`http://localhost:3000/minside/${brukernavn}`)
         .then(response => response.json())
         .then(data => {
-            visKjopteBiler(data);
+            visKjopteTskjorter(data);
         })
         .catch(error => {
-            // Logg feilen hvis det kommer en feil i henting av kjøpte biler
-            console.error("Feil ved henting av kjøpte biler:", error);
+            // Logg feilen hvis det kommer en feil i henting av kjøpte t-skjorter
+            console.error("Feil ved henting av kjøpte t-skjorter:", error);
         });
 }
 
-// Vis kjøpte biler på min side
-function visKjopteBiler(biler) {
-    const container = document.getElementById("solgte-biler");
+// Vis kjøpte t-skjorter på min side
+function visKjopteTskjorter(tskjorter) {
+    const container = document.getElementById("solgte-tskjorter");
     if (!container) {
-        console.warn("Fant ikke 'solgte-biler' container");
+        console.warn("Fant ikke 'solgte-tskjorter' container");
         return;
     }
 
     container.innerHTML = "";
 
-    if (biler.length === 0) {
-        container.innerHTML = "<p>Du har ikke kjøpt noen biler ennå.</p>";
+    if (tskjorter.length === 0) {
+        container.innerHTML = "<p>Du har ikke kjøpt noen t-skjorter ennå.</p>";
         return;
     }
 
-    // Vis biler som brukeren har kjøpt
-    biler.forEach(bil => {
+    // Vis t-skjorter som brukeren har kjøpt
+    tskjorter.forEach(tskjorte => {
         const div = document.createElement("div");
-        div.classList.add("bil");
+        div.classList.add("tskjorte");
         div.innerHTML = `
-            <h3>${bil.modell}</h3>
-            <img src="${bil.bilde}" alt="${bil.modell}" class="bil-bilde" />
-            <p>Pris: ${bil.pris} kr</p>
-            <p>Merke: ${bil.merke}</p>
-            <p>Årsmodell: ${bil.år}</p>
-            <p>Giring: ${bil.gir}</p>
+            <h3>${tskjorte.navn}</h3>
+            <img src="${tskjorte.bilde}" alt="${tskjorte.navn}" class="tskjorte-bilde" />
+            <p>Pris: ${tskjorte.pris} kr</p>
+            <p>Farge: ${tskjorte.farge}</p>
+            <p>Størrelse: ${tskjorte.størrelse}</p>
+            <p>Design: ${tskjorte.design}</p>
         `;
         container.appendChild(div);
     });
 }
 
-// Hvis vi er på minside.html, hent kjøpte biler
+// Hvis vi er på minside.html, hent kjøpte t-skjorter
 if (window.location.pathname.includes("minside.html")) {
-    hentKjopteBiler();
+    hentKjopteTskjorter();
 }
-
-// copilot har gidt meg forslag for resten av setningane imens eg skriver dei, så han hjolpe meg med å gjere det litt meir ryddig og raskere. 
-// han kommer typisk midt inni ei setning og foreslår det som eg har tenkt å skrive, så eg kan bare trykke enter for å godta det han foreslår.

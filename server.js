@@ -21,7 +21,7 @@ app.use((req, res, next) => {
 });
 
 // Koble til databasen
-let db = new sqlite3.Database('./helgomega.db', (err) => {
+let db = new sqlite3.Database('./nordicgeeks.db', (err) => {
     if (err) {
         console.error('Feil ved tilkobling til databasen:', err.message);
     } else {
@@ -30,16 +30,16 @@ let db = new sqlite3.Database('./helgomega.db', (err) => {
 });
 
 app.get('/', (req, res) => {
-    res.send('Velkommen til Helgomega API!'); // Enkel test
+    res.send('Velkommen til Nordic Geeks API!'); // Enkel test
 });
 
-app.get('/kjop/biler', (req, res) => {
-    const sql = `SELECT * FROM biler`; // Hent alle biler
+app.get('/kjop/tskjorter', (req, res) => {
+    const sql = `SELECT * FROM tskjorter`; // Hent alle t-skjorter
     db.all(sql, [], (err, rows) => {
         if (err) {
             return res.status(500).json({ error: err.message });
         }
-        res.json(rows); // Send tilbake biler
+        res.json(rows); // Send tilbake t-skjorter
     });
 });
 
@@ -85,7 +85,7 @@ app.post('/login', (req, res) => {
         }
 
         if (!row) {
-            return res.status(401).json({ error: "Hei1, Feil brukernavn eller passord" });
+            return res.status(401).json({ error: "Feil brukernavn eller passord" });
         }
 
         try {
@@ -93,7 +93,7 @@ app.post('/login', (req, res) => {
             if (match) {
                 res.json({ success: true, brukernavn: row.brukernavn }); // Innlogging OK
             } else {
-                res.status(401).json({ error: "Hei2, Feil brukernavn eller passord" });
+                res.status(401).json({ error: "Feil brukernavn eller passord" });
             }
         } catch (error) {
             res.status(500).json({ error: "Noe gikk galt ved sjekking av passord" });
@@ -101,24 +101,24 @@ app.post('/login', (req, res) => {
     });
 });
 
-// Hent kjøpte biler for ein bruker
+// Hent kjøpte t-skjorter for ein bruker
 app.get('/minside/:brukernavn', (req, res) => {
     const brukernavn = req.params.brukernavn;
 
     const sql = `
-        SELECT biler.*
+        SELECT tskjorter.*
         FROM kjop
         JOIN brukere ON kjop.bruker_id = brukere.id
-        JOIN biler ON kjop.bilerID = biler.id
+        JOIN tskjorter ON kjop.tskjorteID = tskjorter.id
         WHERE brukere.brukernavn = ?
     `;
 
     db.all(sql, [brukernavn], (err, rows) => {
         if (err) {
-            console.error("Feil ved henting av kjøpte biler:", err);
+            console.error("Feil ved henting av kjøpte t-skjorter:", err);
             return res.status(500).json({ error: "Noe gikk galt på serveren." });
         }
 
-        res.json(rows); // Send kjøpte biler
+        res.json(rows); // Send kjøpte t-skjorter
     });
 });
