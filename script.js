@@ -181,7 +181,6 @@ function visTskjorter(tskjorter) {
             <p><strong>Pris:</strong> ${tskjorte.pris} kr</p>
             <p><strong>Farge:</strong> ${escapeHtml(tskjorte.farge)}</p>
             <p><strong>Størrelse:</strong> ${escapeHtml(tskjorte.størrelse)}</p>
-            <p><strong>Design:</strong> ${escapeHtml(tskjorte.design)}</p>
             ${currentUser ? `<button class="kjop-btn" onclick="kjopTskjorte(${tskjorte.id})">Kjøp</button>` : 
                 '<div style="margin-top: 15px; padding: 10px; background: rgba(231, 76, 60, 0.1); border-radius: 8px; text-align: center; color: #e74c3c;"><a href="login.html" style="color: #e74c3c; text-decoration: none; font-weight: 500;">Logg inn for å kjøpe</a></div>'}
         </div>
@@ -377,7 +376,6 @@ function visKjopteTskjorter(tskjorter) {
             <p><strong>Pris:</strong> ${tskjorte.pris} kr</p>
             <p><strong>Farge:</strong> ${escapeHtml(tskjorte.farge)}</p>
             <p><strong>Størrelse:</strong> ${escapeHtml(tskjorte.størrelse)}</p>
-            <p><strong>Design:</strong> ${escapeHtml(tskjorte.design)}</p>
             <div style="
                 margin-top: 15px; 
                 padding: 12px; 
