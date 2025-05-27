@@ -65,11 +65,6 @@ app.post('/bruker', async (req, res) => {
     }
 });
 
-// Start server
-app.listen(port, () => {
-    console.log(`Serveren kjører på http://localhost:${port}`);
-});
-
 // Logg inn
 app.post('/login', (req, res) => {
     const { brukernavn, passord } = req.body;
@@ -101,7 +96,72 @@ app.post('/login', (req, res) => {
     });
 });
 
-// Hent kjøpte t-skjorter for ein bruker
+// MANGLENDE KJØP-FUNKSJONALITET - LEGG TIL DENNE:
+app.post('/kjop/:tskjorteId', (req, res) => {
+    const tskjorteId = req.params.tskjorteId;
+    const { brukernavn } = req.body;
+
+    if (!brukernavn) {
+        return res.status(400).json({ error: "Brukernavn må oppgis" });
+    }
+
+    // Først, finn bruker-ID basert på brukernavn
+    const findUserSql = `SELECT id FROM brukere WHERE brukernavn = ?`;
+    db.get(findUserSql, [brukernavn], (err, userRow) => {
+        if (err) {
+            console.error("Feil ved henting av bruker:", err);
+            return res.status(500).json({ error: "Feil ved henting av bruker" });
+        }
+
+        if (!userRow) {
+            return res.status(404).json({ error: "Bruker ikke funnet" });
+        }
+
+        // Sjekk om t-skjorten eksisterer
+        const checkTshirtSql = `SELECT id FROM tskjorter WHERE id = ?`;
+        db.get(checkTshirtSql, [tskjorteId], (err, tshirtRow) => {
+            if (err) {
+                console.error("Feil ved sjekking av t-skjorte:", err);
+                return res.status(500).json({ error: "Feil ved sjekking av t-skjorte" });
+            }
+
+            if (!tshirtRow) {
+                return res.status(404).json({ error: "T-skjorte ikke funnet" });
+            }
+
+            // Sjekk om brukeren allerede har kjøpt denne t-skjorten
+            const checkPurchaseSql = `SELECT id FROM kjop WHERE bruker_id = ? AND tskjorteID = ?`;
+            db.get(checkPurchaseSql, [userRow.id, tskjorteId], (err, existingPurchase) => {
+                if (err) {
+                    console.error("Feil ved sjekking av eksisterende kjøp:", err);
+                    return res.status(500).json({ error: "Feil ved sjekking av kjøp" });
+                }
+
+                if (existingPurchase) {
+                    return res.status(400).json({ error: "Du har allerede kjøpt denne t-skjorten" });
+                }
+
+                // Legg til kjøpet i databasen
+                const insertPurchaseSql = `INSERT INTO kjop (bruker_id, tskjorteID) VALUES (?, ?)`;
+                db.run(insertPurchaseSql, [userRow.id, tskjorteId], function(err) {
+                    if (err) {
+                        console.error("Feil ved registrering av kjøp:", err);
+                        return res.status(500).json({ error: "Feil ved registrering av kjøp" });
+                    }
+
+                    console.log(`T-skjorte ${tskjorteId} kjøpt av bruker ${brukernavn} (ID: ${userRow.id})`);
+                    res.json({ 
+                        success: true, 
+                        message: "T-skjorte kjøpt!", 
+                        purchaseId: this.lastID 
+                    });
+                });
+            });
+        });
+    });
+});
+
+// Hent kjøpte t-skjorter for en bruker
 app.get('/minside/:brukernavn', (req, res) => {
     const brukernavn = req.params.brukernavn;
 
@@ -121,4 +181,9 @@ app.get('/minside/:brukernavn', (req, res) => {
 
         res.json(rows); // Send kjøpte t-skjorter
     });
+});
+
+// Start server
+app.listen(port, () => {
+    console.log(`Serveren kjører på http://localhost:${port}`);
 });
