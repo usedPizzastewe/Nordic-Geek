@@ -26,8 +26,40 @@ let db = new sqlite3.Database('./nordicgeeks.db', (err) => {
         console.error('Feil ved tilkobling til databasen:', err.message);
     } else {
         console.log('Tilkoblet til SQLite-database.');
+        // Opprett handlekurv-tabell hvis den ikke eksisterer
+        createHandlekurvTable();
     }
 });
+
+// Opprett handlekurv-tabell
+function createHandlekurvTable() {
+    const sql = `
+        CREATE TABLE IF NOT EXISTS handlekurv (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bruker_id INTEGER NOT NULL,
+            tskjorte_id INTEGER NOT NULL,
+            antall INTEGER DEFAULT 1,
+            opprettet DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (bruker_id) REFERENCES brukere (id),
+            FOREIGN KEY (tskjorte_id) REFERENCES tskjorter (id),
+            UNIQUE(bruker_id, tskjorte_id)
+        )
+    `;
+    
+    db.run(sql, (err) => {
+        if (err) {
+            console.error('Feil ved opprettelse av handlekurv-tabell:', err.message);
+        } else {
+            console.log('Handlekurv-tabell klar.');
+        }
+    });
+}
+
+// Hjelpefunksjon for å finne bruker-ID
+function findUserId(brukernavn, callback) {
+    const sql = `SELECT id FROM brukere WHERE brukernavn = ?`;
+    db.get(sql, [brukernavn], callback);
+}
 
 app.get('/', (req, res) => {
     res.send('Velkommen til Nordic Geeks API!'); // Enkel test
@@ -96,7 +128,239 @@ app.post('/login', (req, res) => {
     });
 });
 
-// MANGLENDE KJØP-FUNKSJONALITET - LEGG TIL DENNE:
+// ========== HANDLEKURV-ENDEPUNKTER ==========
+
+// Legg til produkt i handlekurv
+app.post('/legg-til-handlekurv/:tskjorteId', (req, res) => {
+    const tskjorteId = req.params.tskjorteId;
+    const { brukernavn } = req.body;
+
+    if (!brukernavn) {
+        return res.status(400).json({ error: "Brukernavn må oppgis" });
+    }
+
+    findUserId(brukernavn, (err, userRow) => {
+        if (err) {
+            return res.status(500).json({ error: "Feil ved henting av bruker" });
+        }
+        if (!userRow) {
+            return res.status(404).json({ error: "Bruker ikke funnet" });
+        }
+
+        // Sjekk om produktet allerede er i handlekurven
+        const checkSql = `SELECT id, antall FROM handlekurv WHERE bruker_id = ? AND tskjorte_id = ?`;
+        db.get(checkSql, [userRow.id, tskjorteId], (err, existing) => {
+            if (err) {
+                return res.status(500).json({ error: "Feil ved sjekking av handlekurv" });
+            }
+
+            if (existing) {
+                // Øk antallet
+                const updateSql = `UPDATE handlekurv SET antall = antall + 1 WHERE id = ?`;
+                db.run(updateSql, [existing.id], (err) => {
+                    if (err) {
+                        return res.status(500).json({ error: "Feil ved oppdatering av handlekurv" });
+                    }
+                    res.json({ success: true, message: "Antall økt i handlekurv" });
+                });
+            } else {
+                // Legg til nytt produkt
+                const insertSql = `INSERT INTO handlekurv (bruker_id, tskjorte_id, antall) VALUES (?, ?, 1)`;
+                db.run(insertSql, [userRow.id, tskjorteId], (err) => {
+                    if (err) {
+                        return res.status(500).json({ error: "Feil ved tillegging til handlekurv" });
+                    }
+                    res.json({ success: true, message: "Produkt lagt til i handlekurv" });
+                });
+            }
+        });
+    });
+});
+
+// Hent handlekurv for innlogget bruker
+app.get('/handlekurv', (req, res) => {
+    const brukernavn = req.query.brukernavn;
+
+    if (!brukernavn) {
+        return res.status(400).json({ error: "Brukernavn må oppgis" });
+    }
+
+    const sql = `
+        SELECT 
+            t.*,
+            h.antall,
+            h.id as handlekurv_id
+        FROM handlekurv h
+        JOIN brukere b ON h.bruker_id = b.id
+        JOIN tskjorter t ON h.tskjorte_id = t.id
+        WHERE b.brukernavn = ?
+        ORDER BY h.opprettet DESC
+    `;
+
+    db.all(sql, [brukernavn], (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: "Feil ved henting av handlekurv" });
+        }
+        res.json(rows);
+    });
+});
+
+// Endre antall i handlekurv
+app.put('/endre-antall/:tskjorteId', (req, res) => {
+    const tskjorteId = req.params.tskjorteId;
+    const { antall, brukernavn } = req.body;
+
+    if (!brukernavn || !antall) {
+        return res.status(400).json({ error: "Brukernavn og antall må oppgis" });
+    }
+
+    findUserId(brukernavn, (err, userRow) => {
+        if (err || !userRow) {
+            return res.status(404).json({ error: "Bruker ikke funnet" });
+        }
+
+        if (antall <= 0) {
+            // Fjern produktet hvis antall er 0 eller mindre
+            const deleteSql = `DELETE FROM handlekurv WHERE bruker_id = ? AND tskjorte_id = ?`;
+            db.run(deleteSql, [userRow.id, tskjorteId], (err) => {
+                if (err) {
+                    return res.status(500).json({ error: "Feil ved fjerning fra handlekurv" });
+                }
+                res.json({ success: true, message: "Produkt fjernet fra handlekurv" });
+            });
+        } else {
+            // Oppdater antallet
+            const updateSql = `UPDATE handlekurv SET antall = ? WHERE bruker_id = ? AND tskjorte_id = ?`;
+            db.run(updateSql, [antall, userRow.id, tskjorteId], (err) => {
+                if (err) {
+                    return res.status(500).json({ error: "Feil ved oppdatering av antall" });
+                }
+                res.json({ success: true, message: "Antall oppdatert" });
+            });
+        }
+    });
+});
+
+// Fjern produkt fra handlekurv
+app.delete('/fjern-fra-handlekurv/:tskjorteId', (req, res) => {
+    const tskjorteId = req.params.tskjorteId;
+    const { brukernavn } = req.body;
+
+    if (!brukernavn) {
+        return res.status(400).json({ error: "Brukernavn må oppgis" });
+    }
+
+    findUserId(brukernavn, (err, userRow) => {
+        if (err || !userRow) {
+            return res.status(404).json({ error: "Bruker ikke funnet" });
+        }
+
+        const deleteSql = `DELETE FROM handlekurv WHERE bruker_id = ? AND tskjorte_id = ?`;
+        db.run(deleteSql, [userRow.id, tskjorteId], (err) => {
+            if (err) {
+                return res.status(500).json({ error: "Feil ved fjerning fra handlekurv" });
+            }
+            res.json({ success: true, message: "Produkt fjernet fra handlekurv" });
+        });
+    });
+});
+
+// Kjøp alt i handlekurv
+app.post('/kjop-alt', (req, res) => {
+    const { brukernavn } = req.body;
+
+    if (!brukernavn) {
+        return res.status(400).json({ error: "Brukernavn må oppgis" });
+    }
+
+    findUserId(brukernavn, (err, userRow) => {
+        if (err || !userRow) {
+            return res.status(404).json({ error: "Bruker ikke funnet" });
+        }
+
+        // Hent alt fra handlekurven
+        const getHandlekurvSql = `SELECT tskjorte_id, antall FROM handlekurv WHERE bruker_id = ?`;
+        db.all(getHandlekurvSql, [userRow.id], (err, handlekurvItems) => {
+            if (err) {
+                return res.status(500).json({ error: "Feil ved henting av handlekurv" });
+            }
+
+            if (handlekurvItems.length === 0) {
+                return res.status(400).json({ error: "Handlekurven er tom" });
+            }
+
+            // Start transaksjon
+            db.serialize(() => {
+                db.run("BEGIN TRANSACTION");
+
+                let completed = 0;
+                let hasError = false;
+
+                handlekurvItems.forEach((item) => {
+                    // Legg til kjøp for hvert antall
+                    for (let i = 0; i < item.antall; i++) {
+                        const insertKjopSql = `INSERT INTO kjop (bruker_id, tskjorteID) VALUES (?, ?)`;
+                        db.run(insertKjopSql, [userRow.id, item.tskjorte_id], (err) => {
+                            if (err && !hasError) {
+                                hasError = true;
+                                db.run("ROLLBACK");
+                                return res.status(500).json({ error: "Feil ved registrering av kjøp" });
+                            }
+
+                            completed++;
+                            const totalOperations = handlekurvItems.reduce((sum, item) => sum + item.antall, 0);
+
+                            if (completed === totalOperations && !hasError) {
+                                // Tøm handlekurven
+                                const clearHandlekurvSql = `DELETE FROM handlekurv WHERE bruker_id = ?`;
+                                db.run(clearHandlekurvSql, [userRow.id], (err) => {
+                                    if (err) {
+                                        db.run("ROLLBACK");
+                                        return res.status(500).json({ error: "Feil ved tømming av handlekurv" });
+                                    }
+
+                                    db.run("COMMIT");
+                                    res.json({ 
+                                        success: true, 
+                                        message: "Alle produkter kjøpt!",
+                                        antallKjopt: totalOperations
+                                    });
+                                });
+                            }
+                        });
+                    }
+                });
+            });
+        });
+    });
+});
+
+// Tøm handlekurv
+app.delete('/tom-handlekurv', (req, res) => {
+    const { brukernavn } = req.body;
+
+    if (!brukernavn) {
+        return res.status(400).json({ error: "Brukernavn må oppgis" });
+    }
+
+    findUserId(brukernavn, (err, userRow) => {
+        if (err || !userRow) {
+            return res.status(404).json({ error: "Bruker ikke funnet" });
+        }
+
+        const deleteSql = `DELETE FROM handlekurv WHERE bruker_id = ?`;
+        db.run(deleteSql, [userRow.id], (err) => {
+            if (err) {
+                return res.status(500).json({ error: "Feil ved tømming av handlekurv" });
+            }
+            res.json({ success: true, message: "Handlekurv tømt" });
+        });
+    });
+});
+
+// ========== EKSISTERENDE ENDEPUNKTER ==========
+
+// Direkte kjøp (beholdt for bakoverkompatibilitet)
 app.post('/kjop/:tskjorteId', (req, res) => {
     const tskjorteId = req.params.tskjorteId;
     const { brukernavn } = req.body;

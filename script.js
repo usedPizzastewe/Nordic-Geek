@@ -1,5 +1,5 @@
 // Nordic Geek - Hovedscript
-// Forbedret versjon med bedre feilhåndtering og brukeropplevelse
+// Enkel versjon med handlekurv
 
 // Globale variabler
 const API_BASE_URL = 'http://localhost:3000';
@@ -101,7 +101,7 @@ function updateUserDisplay() {
     }
 }
 
-// API-kall med forbedret feilhåndtering
+// API-kall
 async function apiCall(endpoint, options = {}) {
     try {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -120,10 +120,42 @@ async function apiCall(endpoint, options = {}) {
         return await response.json();
     } catch (error) {
         console.error(`API-feil (${endpoint}):`, error);
-        if (error.name === 'TypeError' && error.message.includes('fetch')) {
-            throw new Error('Kan ikke koble til serveren. Sjekk at serveren kjører på port 3000.');
-        }
         throw error;
+    }
+}
+
+// Handlekurv localStorage funksjoner
+function leggTilIHandlekurv(tskjorteId) {
+    const handlekurv = JSON.parse(localStorage.getItem('handlekurv') || '[]');
+    if (!handlekurv.includes(tskjorteId)) {
+        handlekurv.push(tskjorteId);
+        localStorage.setItem('handlekurv', JSON.stringify(handlekurv));
+        oppdaterHandlekurvTeller();
+    }
+}
+
+function fjernFraHandlekurvFunc(tskjorteId) {
+    let handlekurv = JSON.parse(localStorage.getItem('handlekurv') || '[]');
+    handlekurv = handlekurv.filter(id => id !== tskjorteId);
+    localStorage.setItem('handlekurv', JSON.stringify(handlekurv));
+    oppdaterHandlekurvTeller();
+}
+
+function tømHandlekurv() {
+    localStorage.removeItem('handlekurv');
+    oppdaterHandlekurvTeller();
+}
+
+function hentHandlekurv() {
+    return JSON.parse(localStorage.getItem('handlekurv') || '[]');
+}
+
+function oppdaterHandlekurvTeller() {
+    const handlekurv = hentHandlekurv();
+    const teller = document.querySelector('.handlekurv-teller');
+    if (teller) {
+        teller.textContent = handlekurv.length;
+        teller.style.display = handlekurv.length > 0 ? 'inline' : 'none';
     }
 }
 
@@ -181,8 +213,12 @@ function visTskjorter(tskjorter) {
             <p><strong>Pris:</strong> ${tskjorte.pris} kr</p>
             <p><strong>Farge:</strong> ${escapeHtml(tskjorte.farge)}</p>
             <p><strong>Størrelse:</strong> ${escapeHtml(tskjorte.størrelse)}</p>
-            ${currentUser ? `<button class="kjop-btn" onclick="kjopTskjorte(${tskjorte.id})">Kjøp</button>` : 
-                '<div style="margin-top: 15px; padding: 10px; background: rgba(231, 76, 60, 0.1); border-radius: 8px; text-align: center; color: #e74c3c;"><a href="login.html" style="color: #e74c3c; text-decoration: none; font-weight: 500;">Logg inn for å kjøpe</a></div>'}
+            ${currentUser ? 
+                `<button class="legg-til-handlekurv-btn" onclick="leggTilHandlekurv(${tskjorte.id})">
+                    🛒 Legg til i handlekurv
+                </button>` : 
+                '<div style="margin-top: 15px; padding: 10px; background: rgba(231, 76, 60, 0.1); border-radius: 8px; text-align: center; color: #e74c3c;"><a href="login.html" style="color: #e74c3c; text-decoration: none; font-weight: 500;">Logg inn for å handle</a></div>'
+            }
         </div>
     `).join('');
 }
@@ -194,37 +230,210 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Kjøpsfunksjonalitet
-async function kjopTskjorte(tskjorteId) {
+// Handlekurv-funksjoner
+function leggTilHandlekurv(tskjorteId) {
     if (!currentUser) {
-        showMessage('Du må logge inn for å kjøpe t-skjorter', 'error');
+        showMessage('Du må logge inn for å legge produkter i handlekurven', 'error');
         return;
     }
     
-    try {
-        const brukernavn = typeof currentUser === 'string' ? currentUser : currentUser.brukernavn;
-        const response = await apiCall(`/kjop/${tskjorteId}`, {
-            method: 'POST',
-            body: JSON.stringify({ brukernavn })
-        });
-        
-        if (response.success) {
-            showMessage('T-skjorte kjøpt! Sjekk "Min side" for å se dine kjøp.', 'success');
+    leggTilIHandlekurv(tskjorteId);
+    showMessage('Produktet er lagt til i handlekurven!', 'success');
+    
+    // Oppdater knappen midlertidig
+    const tskjorteElement = document.querySelector(`[data-id="${tskjorteId}"]`);
+    if (tskjorteElement) {
+        const btn = tskjorteElement.querySelector('.legg-til-handlekurv-btn');
+        if (btn) {
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '✓ Lagt til';
+            btn.style.background = '#27ae60';
+            btn.disabled = true;
             
-            // Oppdater knappen til "Kjøpt"
-            const tskjorteElement = document.querySelector(`[data-id="${tskjorteId}"]`);
-            if (tskjorteElement) {
-                const kjopBtn = tskjorteElement.querySelector('.kjop-btn');
-                if (kjopBtn) {
-                    kjopBtn.textContent = '✓ Kjøpt';
-                    kjopBtn.style.background = '#27ae60';
-                    kjopBtn.disabled = true;
-                    kjopBtn.style.cursor = 'default';
-                }
-            }
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.style.background = '';
+                btn.disabled = false;
+            }, 2000);
         }
+    }
+}
+
+async function hentHandlekurvProdukter() {
+    if (!currentUser) {
+        showMessage('Du må logge inn for å se handlekurven', 'error');
+        setTimeout(() => {
+            window.location.href = 'login.html';
+        }, 2000);
+        return;
+    }
+    
+    const container = document.getElementById('solgte-tskjorter');
+    if (!container) return;
+    
+    try {
+        showLoading(container);
+        
+        const handlekurv = hentHandlekurv();
+        
+        if (handlekurv.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #7f8c8d;">
+                    <h3>Handlekurven er tom</h3>
+                    <p>Du har ikke lagt til noen produkter ennå.</p>
+                    <a href="index.html" style="
+                        display: inline-block; 
+                        margin-top: 15px; 
+                        padding: 12px 24px; 
+                        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); 
+                        color: white; 
+                        text-decoration: none; 
+                        border-radius: 8px;
+                        font-weight: 500;
+                        transition: transform 0.2s ease;
+                    " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                        Se våre produkter
+                    </a>
+                </div>
+            `;
+            return;
+        }
+        
+        // Hent produktinfo
+        const tskjorter = await apiCall('/kjop/tskjorter');
+        const handlekurvProdukter = handlekurv.map(id => tskjorter.find(t => t.id === id)).filter(p => p);
+        
+        visHandlekurv(handlekurvProdukter);
     } catch (error) {
-        showMessage('Kunne ikke kjøpe t-skjorte: ' + error.message, 'error');
+        container.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #e74c3c;">
+                <h3>Kunne ikke laste handlekurven</h3>
+                <p>${error.message}</p>
+                <button onclick="hentHandlekurvProdukter()" style="
+                    margin-top: 15px;
+                    padding: 10px 20px;
+                    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 500;
+                ">Prøv igjen</button>
+            </div>
+        `;
+        showMessage('Kunne ikke laste handlekurv: ' + error.message, 'error');
+    }
+}
+
+function visHandlekurv(handlekurvProdukter) {
+    const container = document.getElementById('solgte-tskjorter');
+    if (!container) return;
+    
+    const totalSum = handlekurvProdukter.reduce((sum, produkt) => sum + parseInt(produkt.pris), 0);
+    
+    container.innerHTML = `
+        <!-- Sammendrag øverst -->
+        <div style="
+            margin-bottom: 40px; 
+            padding: 30px; 
+            background: rgba(255, 255, 255, 0.95); 
+            backdrop-filter: blur(20px); 
+            border: 1px solid rgba(255, 255, 255, 0.2); 
+            border-radius: 16px; 
+            text-align: center;
+            box-shadow: var(--shadow-soft);
+            position: sticky;
+            top: 120px;
+            z-index: 100;
+        ">
+            <h3 style="margin: 0 0 15px 0; color: var(--text-primary);">Handlekurv sammendrag</h3>
+            <p style="font-size: 1.1rem; margin: 10px 0;">
+                <strong>Antall produkter:</strong> ${handlekurvProdukter.length} stk
+            </p>
+            <p style="font-size: 1.3rem; margin: 15px 0; color: var(--text-primary);">
+                <strong>Totalt: ${totalSum} kr</strong>
+            </p>
+            <button onclick="kjopAlt()" style="
+                padding: 16px 32px;
+                font-size: 1.2rem;
+                font-weight: 600;
+                background: var(--primary-gradient);
+                color: white;
+                border: none;
+                border-radius: 12px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                margin: 10px;
+            " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-hover)';" 
+               onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';">
+                🛒 Kjøp alt (${totalSum} kr)
+            </button>
+        </div>
+        
+        <!-- Produktliste -->
+        <div class="produkt-grid" style="margin-bottom: 40px;">
+            ${handlekurvProdukter.map(tskjorte => `
+                <div class="tskjorte">
+                    <h3>${escapeHtml(tskjorte.navn)}</h3>
+                    <img src="${escapeHtml(tskjorte.bilde)}" 
+                         alt="${escapeHtml(tskjorte.navn)}" 
+                         class="tskjorte-bilde"
+                         onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjVmNWY1Ii/+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkluZ2VuIGJpbGRlPC90ZXh0Pjwvc3ZnPg=='" />
+                    <p><strong>Pris:</strong> ${tskjorte.pris} kr</p>
+                    <p><strong>Farge:</strong> ${escapeHtml(tskjorte.farge)}</p>
+                    <p><strong>Størrelse:</strong> ${escapeHtml(tskjorte.størrelse)}</p>
+                    <button onclick="fjernFraHandlekurvKnapp(${tskjorte.id})" style="
+                        width: 100%;
+                        padding: 8px;
+                        margin-top: 10px;
+                        background: rgba(231, 76, 60, 0.1);
+                        color: #e74c3c;
+                        border: 1px solid rgba(231, 76, 60, 0.3);
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-size: 0.9rem;
+                        transition: all 0.2s ease;
+                    " onmouseover="this.style.background='#e74c3c'; this.style.color='white';" 
+                       onmouseout="this.style.background='rgba(231, 76, 60, 0.1)'; this.style.color='#e74c3c';">
+                        Fjern
+                    </button>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function fjernFraHandlekurvKnapp(tskjorteId) {
+    fjernFraHandlekurvFunc(tskjorteId);
+    showMessage('Produktet er fjernet fra handlekurven', 'success');
+    hentHandlekurvProdukter();
+}
+
+async function kjopAlt() {
+    const handlekurv = hentHandlekurv();
+    if (handlekurv.length === 0) {
+        showMessage('Handlekurven er tom', 'info');
+        return;
+    }
+    
+    // Hent produktinfo for å vise hva som ble "kjøpt"
+    try {
+        const tskjorter = await apiCall('/kjop/tskjorter');
+        const handlekurvProdukter = handlekurv.map(id => tskjorter.find(t => t.id === id)).filter(p => p);
+        const totalSum = handlekurvProdukter.reduce((sum, produkt) => sum + parseInt(produkt.pris), 0);
+        
+        // Vis hva som ble kjøpt
+        const produktNavn = handlekurvProdukter.map(p => p.navn).join(', ');
+        showMessage(`Kjøpt: ${produktNavn} - Totalt: ${totalSum} kr`, 'success');
+        
+        // Tøm handlekurven
+        tømHandlekurv();
+        hentHandlekurvProdukter();
+        
+    } catch (error) {
+        showMessage('Handlekurven er tømt!', 'success');
+        tømHandlekurv();
+        hentHandlekurvProdukter();
     }
 }
 
@@ -240,7 +449,6 @@ function setupLogin() {
         const passord = document.getElementById('password').value;
         const errorDiv = document.getElementById('loginError');
         
-        // Skjul tidligere feilmeldinger
         errorDiv.style.display = 'none';
         errorDiv.textContent = '';
         
@@ -251,7 +459,6 @@ function setupLogin() {
         }
         
         try {
-            // Vis loading på knapp
             const submitBtn = loginForm.querySelector('button[type="submit"]');
             const originalText = submitBtn.textContent;
             submitBtn.textContent = 'Logger inn...';
@@ -276,7 +483,6 @@ function setupLogin() {
             errorDiv.style.display = 'block';
             showMessage('Innlogging feilet: ' + error.message, 'error');
         } finally {
-            // Tilbakestill knapp
             const submitBtn = loginForm.querySelector('button[type="submit"]');
             if (submitBtn) {
                 submitBtn.textContent = 'Logg inn';
@@ -300,111 +506,17 @@ function setupLogout() {
     });
 }
 
-// Hent brukerens kjøpte t-skjorter
-async function hentKjopteTskjorter() {
-    if (!currentUser) {
-        showMessage('Du må logge inn for å se dine kjøp', 'error');
-        setTimeout(() => {
-            window.location.href = 'login.html';
-        }, 2000);
-        return;
-    }
-    
-    const container = document.getElementById('solgte-tskjorter');
-    if (!container) return;
-    
-    try {
-        showLoading(container);
-        const brukernavn = typeof currentUser === 'string' ? currentUser : currentUser.brukernavn;
-        const tskjorter = await apiCall(`/minside/${encodeURIComponent(brukernavn)}`);
-        visKjopteTskjorter(tskjorter);
-    } catch (error) {
-        container.innerHTML = `
-            <div style="text-align: center; padding: 40px; color: #e74c3c;">
-                <h3>Kunne ikke laste dine kjøp</h3>
-                <p>${error.message}</p>
-                <button onclick="hentKjopteTskjorter()" style="
-                    margin-top: 15px;
-                    padding: 10px 20px;
-                    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    font-weight: 500;
-                ">Prøv igjen</button>
-            </div>
-        `;
-        showMessage('Kunne ikke laste kjøpte t-skjorter: ' + error.message, 'error');
-    }
-}
-
-function visKjopteTskjorter(tskjorter) {
-    const container = document.getElementById('solgte-tskjorter');
-    if (!container) return;
-    
-    if (!tskjorter || tskjorter.length === 0) {
-        container.innerHTML = `
-            <div style="text-align: center; padding: 40px; color: #7f8c8d;">
-                <h3>Ingen kjøp ennå</h3>
-                <p>Du har ikke kjøpt noen t-skjorter ennå.</p>
-                <a href="index.html" style="
-                    display: inline-block; 
-                    margin-top: 15px; 
-                    padding: 12px 24px; 
-                    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); 
-                    color: white; 
-                    text-decoration: none; 
-                    border-radius: 8px;
-                    font-weight: 500;
-                    transition: transform 0.2s ease;
-                " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
-                    Se våre produkter
-                </a>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = tskjorter.map(tskjorte => `
-        <div class="tskjorte">
-            <h3>${escapeHtml(tskjorte.navn)}</h3>
-            <img src="${escapeHtml(tskjorte.bilde)}" 
-                 alt="${escapeHtml(tskjorte.navn)}" 
-                 class="tskjorte-bilde"
-                 onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjVmNWY1Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkluZ2VuIGJpbGRlPC90ZXh0Pjwvc3ZnPg=='" />
-            <p><strong>Pris:</strong> ${tskjorte.pris} kr</p>
-            <p><strong>Farge:</strong> ${escapeHtml(tskjorte.farge)}</p>
-            <p><strong>Størrelse:</strong> ${escapeHtml(tskjorte.størrelse)}</p>
-            <div style="
-                margin-top: 15px; 
-                padding: 12px; 
-                background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); 
-                border: 1px solid #c3e6cb; 
-                border-radius: 8px; 
-                color: #155724;
-                text-align: center;
-                font-weight: 500;
-            ">
-                ✓ Kjøpt
-            </div>
-        </div>
-    `).join('');
-}
-
 // Hovedinitialisering
 function initializePage() {
     console.log('Nordic Geek - Initialiserer side...');
     
-    // Sett opp bruker
     currentUser = getCurrentUser();
     updateUserDisplay();
+    oppdaterHandlekurvTeller();
     
-    // Sett opp event listeners
     setupLogin();
     setupLogout();
     
-    // Last innhold basert på side
     const currentPage = window.location.pathname.split('/').pop() || 'index.html';
     
     switch (currentPage) {
@@ -412,9 +524,9 @@ function initializePage() {
         case '':
             hentTskjorter();
             break;
-        case 'minside.html':
+        case 'handlekurv.html':
             if (currentUser) {
-                hentKjopteTskjorter();
+                hentHandlekurvProdukter();
             } else {
                 showMessage('Du må logge inn for å se denne siden', 'error');
                 setTimeout(() => {
@@ -433,7 +545,7 @@ function initializePage() {
     }
 }
 
-// CSS for animasjoner og meldinger
+// CSS
 const additionalCSS = `
 @keyframes slideIn {
     from { transform: translateX(100%); opacity: 0; }
@@ -450,11 +562,11 @@ const additionalCSS = `
     100% { transform: rotate(360deg); }
 }
 
-.kjop-btn {
+.legg-til-handlekurv-btn {
     width: 100%;
     padding: 12px;
     margin-top: 15px;
-    background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
     color: white;
     border: none;
     border-radius: 8px;
@@ -464,47 +576,46 @@ const additionalCSS = `
     font-size: 1rem;
 }
 
-.kjop-btn:hover:not(:disabled) {
+.legg-til-handlekurv-btn:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(39, 174, 96, 0.3);
+    box-shadow: 0 8px 25px rgba(52, 152, 219, 0.3);
 }
 
-.kjop-btn:active:not(:disabled) {
-    transform: translateY(0);
-}
-
-.kjop-btn:disabled {
+.legg-til-handlekurv-btn:disabled {
     opacity: 0.8;
     cursor: default;
 }
 
-/* Responsiv forbedring */
-@media (max-width: 768px) {
-    .message {
-        right: 10px !important;
-        left: 10px !important;
-        max-width: none !important;
-    }
+.handlekurv-teller {
+    background: #e74c3c;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    margin-left: 8px;
+    position: relative;
+    top: -2px;
 }
 `;
 
-// Legg til CSS
 const styleSheet = document.createElement('style');
 styleSheet.textContent = additionalCSS;
 document.head.appendChild(styleSheet);
 
-// Start applikasjonen når DOM er klar
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializePage);
 } else {
     initializePage();
 }
 
-// Global error handler for uventede feil
 window.addEventListener('error', (e) => {
     console.error('Uventet feil:', e.error);
     showMessage('En uventet feil oppstod. Prøv å laste siden på nytt.', 'error');
 });
 
-// Legg til velkommen melding
 console.log('Velkommen til Nordic Geek!');
